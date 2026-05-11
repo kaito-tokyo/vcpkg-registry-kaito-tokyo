@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Vcpkg CI
+
+# file: .github/workflows/vcpkg-ort.yml
+# author: Kaito Udagawa <umireon@kaito.tokyo>
+# version: 1.0.0
+# date: 2026-04-2
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions: {}
+
+jobs:
+  build-port:
+    strategy:
+      matrix:
+        package:
+          - flatbuffers
+          - ruy
+          - tensorflow-lite
+        env-config:
+          - name: Windows x64
+            runs-on: windows-latest
+            triplet: x64-windows-static-md
+          - name: macOS arm64
+            runs-on: macos-latest
+            triplet: arm64-osx
+          - name: macOS x64
+            runs-on: macos-latest
+            triplet: x64-osx
+          - name: Ubuntu x64
+            runs-on: ubuntu-latest
+            triplet: x64-linux
+
+    name: Build ${{ matrix.package }} on ${{ matrix.env-config.name }}
+
+    runs-on: ${{ matrix.env-config.runs-on }}
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+
+    env:
+      VCPKG_VERSION: '2026.04.27'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_VERSION }}
+          persist-credentials: false
+          path: vcpkg
+          filter: blob:none
+
+      - name: Set up vcpkg using Bash
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Print CMake version
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          cmake --version
+
+      - name: Print Ninja version on Ubuntu
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          ninja --version
+
+      - name: Print vcpkg version
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          "$VCPKG_INSTALLATION_ROOT/vcpkg" version
+
+      - name: Install vcpkg port
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        env:
+          PACKAGE_NAME: ${{ matrix.package }}
+          VCPKG_ROOT: '${{ github.workspace }}/vcpkg'
+          VCPKG_TARGET_TRIPLET: ${{ matrix.env-config.triplet }}
+        run: |
+          ./vcpkg/vcpkg install --overlay-ports=ports --triplet="$VCPKG_TARGET_TRIPLET" "$PACKAGE_NAME"
