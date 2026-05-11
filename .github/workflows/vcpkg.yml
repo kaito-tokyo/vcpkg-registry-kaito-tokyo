@@ -19,44 +19,35 @@ on:
 
 permissions: {}
 
+env:
+  VCPKG_VERSION: '2026.04.27'
+
 jobs:
-  build-port:
-    strategy:
-      matrix:
-        package:
-          - flatbuffers
-          - ruy
-          - tensorflow-lite
-        env-config:
-          - name: Windows x64
-            runs-on: windows-latest
-            triplet: x64-windows-static-md
-          - name: macOS arm64
-            runs-on: macos-latest
-            triplet: arm64-osx
-          - name: macOS x64
-            runs-on: macos-latest
-            triplet: x64-osx
-          - name: Ubuntu x64
-            runs-on: ubuntu-latest
-            triplet: x64-linux
-
-    name: Build ${{ matrix.package }} on ${{ matrix.env-config.name }}
-
-    runs-on: ${{ matrix.env-config.runs-on }}
+  build-mlx:
+    runs-on: macos-26
     timeout-minutes: 60
 
     permissions:
       contents: read
 
     env:
-      VCPKG_VERSION: '2026.04.27'
+      DEVELOPER_DIR: '/Applications/Xcode_26.4.1.app'
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      - name: Print CMake version
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          cmake --version
+
+      - name: Print Ninja version on Ubuntu
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          ninja --version
 
       - name: Checkout vcpkg
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -72,26 +63,14 @@ jobs:
         run: |
           ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
-      - name: Print CMake version
-        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
-        run: |
-          cmake --version
-
-      - name: Print Ninja version on Ubuntu
-        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
-        run: |
-          ninja --version
-
-      - name: Print vcpkg version
-        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
-        run: |
-          "$VCPKG_INSTALLATION_ROOT/vcpkg" version
-
-      - name: Install vcpkg port
+      - name: Install vcpkg package
         shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
         env:
-          PACKAGE_NAME: ${{ matrix.package }}
           VCPKG_ROOT: '${{ github.workspace }}/vcpkg'
-          VCPKG_TARGET_TRIPLET: ${{ matrix.env-config.triplet }}
         run: |
-          ./vcpkg/vcpkg install --overlay-ports=ports --triplet="$VCPKG_TARGET_TRIPLET" "$PACKAGE_NAME"
+          ./vcpkg/vcpkg install --overlay-ports=ports mlx
+
+      - if: always()
+        run: |
+          cat /Users/runner/work/vcpkg-registry-kaito-tokyo/vcpkg-registry-kaito-tokyo/vcpkg/buildtrees/detect_compiler/config-arm64-osx-rel-out.log
+          cat /Users/runner/work/vcpkg-registry-kaito-tokyo/vcpkg-registry-kaito-tokyo/vcpkg/buildtrees/detect_compiler/config-arm64-osx-rel-err.log
