@@ -23,6 +23,84 @@ env:
   VCPKG_VERSION: '2026.04.27'
 
 jobs:
+  install-manifest:
+    strategy:
+      matrix:
+        env-config:
+          - name: Windows x64
+            runs-on: windows-latest
+            triplet: x64-windows-static-md
+          - name: macOS arm64
+            runs-on: macos-latest
+            triplet: arm64-osx
+          - name: macOS x64
+            runs-on: macos-latest
+            triplet: x64-osx
+          - name: Ubuntu x64
+            runs-on: ubuntu-latest
+            triplet: x64-linux
+
+    runs-on: ${{ matrix.env-config.runs-on }}
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Print CMake version
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          cmake --version
+
+      - name: Print Ninja version on Ubuntu
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          ninja --version
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_VERSION }}
+          persist-credentials: false
+          path: vcpkg
+          filter: blob:none
+
+      - name: Set up vcpkg using Bash
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        run: |
+          ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Install vcpkg on Bash
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc -euo pipefail -O nullglob {0}
+        env:
+          VCPKG_ROOT: '${{ github.workspace }}/vcpkg'
+          VCPKG_TARGET_TRIPLET: '${{ matrix.env-config.triplet }}'
+        run: |
+          ./vcpkg/vcpkg install --overlay-ports=ports --triplet="$VCPKG_TARGET_TRIPLET"
+
+      - name: Set up vcpkg using Powershell
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./vcpkg/bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Install vcpkg on Powershell
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VCPKG_ROOT: '${{ github.workspace }}\vcpkg'
+          VCPKG_TARGET_TRIPLET: '${{ matrix.env-config.triplet }}'
+        run: |
+          ./vcpkg/vcpkg install --overlay-ports=ports --triplet="$env:VCPKG_TARGET_TRIPLET"
+
   build-mlx:
     runs-on: macos-26
     timeout-minutes: 60
@@ -68,9 +146,4 @@ jobs:
         env:
           VCPKG_ROOT: '${{ github.workspace }}/vcpkg'
         run: |
-          ./vcpkg/vcpkg install --overlay-ports=ports mlx
-
-      - if: always()
-        run: |
-          cat /Users/runner/work/vcpkg-registry-kaito-tokyo/vcpkg-registry-kaito-tokyo/vcpkg/buildtrees/detect_compiler/config-arm64-osx-rel-out.log
-          cat /Users/runner/work/vcpkg-registry-kaito-tokyo/vcpkg-registry-kaito-tokyo/vcpkg/buildtrees/detect_compiler/config-arm64-osx-rel-err.log
+          ./vcpkg/vcpkg install --classic --overlay-ports=ports mlx
